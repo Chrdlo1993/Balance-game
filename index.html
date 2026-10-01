@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuadra el balance</title>
+<meta name="description" content="Juego retro: acomoda las cuentas en Activo, Pasivo o Patrimonio para que la ecuación contable cuadre.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060a06; --panel:#0b130b; --fg:#9dff9d; --dim:#4f8a4f; --line:#1c361c;
+    --a:#45d4ff; --p:#ff5fa2; --t:#ffd23f; --bad:#ff4040; --white:#f4fff4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    background:var(--bg) radial-gradient(ellipse at center,#0d1a0d 0%,#060a06 70%);
+    color:var(--fg); font-family:'VT323',monospace; font-size:20px;
+    overflow-x:hidden; -webkit-font-smoothing:none;
+  }
+  body::after{ /* scanlines CRT */
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:90;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);
+  }
+  .px{font-family:'Press Start 2P',monospace}
+  header{text-align:center;padding:14px 16px 4px}
+  h1{
+    font-family:'Press Start 2P',monospace;font-size:clamp(15px,3.4vw,28px);
+    color:var(--t);letter-spacing:2px;
+    text-shadow:3px 3px 0 #a3312c,0 0 14px rgba(255,210,63,.35);
+  }
+  .sub{color:var(--dim);font-size:18px;margin-top:6px}
+  main{
+    display:grid;grid-template-columns:270px auto 240px;gap:16px;
+    justify-content:center;align-items:start;padding:10px 16px 18px;
+    max-width:1120px;margin:0 auto;
+  }
+  .box{border:3px solid var(--fg);background:var(--panel);box-shadow:5px 5px 0 var(--line);padding:10px}
+  .box h2{font-family:'Press Start 2P',monospace;font-size:9px;margin-bottom:8px;letter-spacing:1px}
+  .sign{
+    font-family:'Press Start 2P',monospace;font-size:9px;text-align:center;color:#000;
+    background:var(--t);padding:5px;margin-bottom:6px;letter-spacing:1px
+  }
+  #scene{width:100%;aspect-ratio:4/3;image-rendering:pixelated;image-rendering:crisp-edges;display:block;border:2px solid var(--line)}
+  #pedido{min-height:118px;margin-top:8px;font-size:21px;line-height:1.05}
+  #quien{color:var(--t);display:block;margin-bottom:3px}
+  #texto::after{content:"█";animation:blink 1s steps(1) infinite;color:var(--fg)}
+  #dice{margin-top:6px;min-height:46px;font-size:19px;line-height:1.05;color:var(--a);border-top:2px dashed var(--line);padding-top:6px}
+  #dice.bad{color:var(--bad)}
+  @keyframes blink{50%{opacity:0}}
+
+  #tablero{display:flex;flex-direction:column;align-items:center}
+  .cols{display:grid;grid-template-columns:repeat(3,1fr);width:100%;font-family:'Press Start 2P',monospace;font-size:9px;text-align:center;margin-bottom:6px;gap:4px}
+  .cols span{padding:6px 0;border:2px solid currentColor}
+  .cols span:nth-child(1){color:var(--a)} .cols span:nth-child(2){color:var(--p)} .cols span:nth-child(3){color:var(--t)}
+  #field{display:block;width:min(420px,calc(100vw - 32px),58vh);height:auto;border:3px solid var(--fg);background:#000;touch-action:none;cursor:pointer}
+  #tablero .wrap{width:min(420px,calc(100vw - 32px),58vh)}
+
+  .stat{display:flex;justify-content:space-between;align-items:baseline;font-size:21px;line-height:1.25}
+  .stat b{font-family:'Press Start 2P',monospace;font-size:11px;color:var(--white);font-weight:normal}
+  .sep{border-top:2px dashed var(--line);margin:8px 0}
+  #eq .stat b{font-size:10px}
+  #eq .ra b{color:var(--a)} #eq .rp b{color:var(--p)} #eq .rt b{color:var(--t)}
+  #eqStatus{font-family:'Press Start 2P',monospace;font-size:10px;text-align:center;padding:7px 4px;margin-top:6px;border:2px solid var(--fg);color:#000;background:var(--fg)}
+  #eqStatus.no{background:transparent;color:var(--bad);border-color:var(--bad)}
+  #next{display:block;width:100%;max-width:210px;margin:2px auto 0}
+  .keys{font-size:17px;color:var(--dim);line-height:1.15}
+  .keys kbd{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--fg);border:1px solid var(--dim);padding:1px 4px;margin-right:4px}
+
+  #touch{display:none;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  #touch button{font-family:'Press Start 2P',monospace;font-size:14px;padding:14px 0;background:var(--panel);color:var(--fg);border:3px solid var(--fg);box-shadow:3px 3px 0 var(--line);touch-action:none;user-select:none;-webkit-user-select:none}
+  #touch button:active{background:var(--fg);color:#000}
+
+  /* Pantallas superpuestas */
+  #screen{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.86);padding:16px}
+  #screen.hide{display:none}
+  .card{width:min(540px,100%);max-height:calc(100vh - 32px);overflow:auto;border:3px solid var(--fg);background:var(--panel);box-shadow:6px 6px 0 var(--line);padding:20px;text-align:center}
+  .card h2{font-family:'Press Start 2P',monospace;font-size:clamp(13px,3vw,18px);color:var(--t);margin-bottom:14px;line-height:1.5}
+  .card p{font-size:20px;line-height:1.1;margin-bottom:10px}
+  .card .big{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--white);margin:8px 0 14px}
+  .btn{font-family:'Press Start 2P',monospace;font-size:11px;padding:12px 16px;background:var(--fg);color:#000;border:0;box-shadow:4px 4px 0 var(--line);cursor:pointer;margin:6px}
+  .btn:hover,.btn:focus-visible{background:var(--t);outline:none}
+  .btn.ghost{background:transparent;color:var(--fg);border:2px solid var(--fg)}
+  input[type=text]{font-family:'Press Start 2P',monospace;font-size:13px;padding:11px;width:min(260px,100%);background:#000;color:var(--t);border:3px solid var(--fg);text-transform:uppercase;text-align:center;outline:none}
+  input[type=text]:focus{border-color:var(--t)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:20px}
+  th{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--dim);padding:6px 4px;border-bottom:2px solid var(--line)}
+  td{padding:3px 4px;border-bottom:1px dashed var(--line)}
+  td:first-child{color:var(--t);width:44px} td:last-child{text-align:right;color:var(--white)}
+  td:nth-child(2){text-align:left}
+  tr.me td{background:var(--fg);color:#000}
+  .muted{color:var(--dim);font-size:17px}
+  .legend{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 14px;font-family:'Press Start 2P',monospace;font-size:8px}
+  .legend span{border:2px solid currentColor;padding:5px 7px}
+  .err{color:var(--bad)}
+
+  @media (max-width:940px){
+    main{grid-template-columns:1fr;max-width:470px;gap:12px}
+    #ventanilla{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:start}
+    #ventanilla .sign{grid-column:1/-1;margin:0}
+    #pedido{margin-top:0;min-height:84px;font-size:19px}
+    #dice{grid-column:1/-1;min-height:48px}
+    #panel{order:3;display:grid;grid-template-columns:1fr 1fr;column-gap:14px}
+    #panel h2,#panel .sep,#panel #next,#panel #eq{grid-column:1/-1}
+    #field,#tablero .wrap{width:min(420px,calc(100vw - 32px),52vh)}
+    #touch{display:grid}
+    .hide-m{display:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>CUADRA EL BALANCE</h1>
+  <div class="sub">ACTIVO = PASIVO + PATRIMONIO</div>
+</header>
+
+<main>
+  <!-- Ventanilla del contador -->
+  <section class="box" id="ventanilla">
+    <div class="sign">VENTANILLA 1 · CONTADOR</div>
+    <canvas id="scene" width="128" height="96"></canvas>
+    <div id="pedido"><span id="quien">EN ESPERA...</span><span id="texto">Abre la ventanilla para atender clientes.</span></div>
+    <div id="dice">CONTADOR: Listo para cuadrar.</div>
+  </section>
+
+  <!-- Tablero -->
+  <section id="tablero">
+    <div class="wrap">
+      <div class="cols"><span>ACTIVO</span><span>PASIVO</span><span>PATRIM.</span></div>
+      <canvas id="field" width="420" height="480" aria-label="Tablero de juego"></canvas>
+      <div id="touch">
+        <button data-k="left" aria-label="Izquierda">◀</button>
+        <button data-k="soft" aria-label="Bajar">▼</button>
+        <button data-k="right" aria-label="Derecha">▶</button>
+        <button data-k="drop" aria-label="Soltar">⤓</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Panel -->
+  <section class="box" id="panel">
+    <h2>MARCADOR</h2>
+    <div class="stat">PUNTOS <b id="hScore">0</b></div>
+    <div class="stat">NIVEL <b id="hLevel">1</b></div>
+    <div class="stat">CLIENTES <b id="hTx">0</b></div>
+    <div class="stat">RACHA <b id="hCombo">0</b></div>
+    <div class="stat">RÉCORD <b id="hBest">0</b></div>
+    <div class="sep"></div>
+    <h2>SIGUIENTE</h2>
+    <canvas id="next" width="140" height="52"></canvas>
+    <div class="sep"></div>
+    <h2>ECUACIÓN</h2>
+    <div id="eq">
+      <div class="stat ra">Activo <b id="tA">$0</b></div>
+      <div class="stat rp">Pasivo <b id="tP">$0</b></div>
+      <div class="stat rt">Patrimonio <b id="tT">$0</b></div>
+      <div id="eqStatus">CUADRA ✓</div>
+    </div>
+    <div class="sep hide-m"></div>
+    <div class="keys hide-m">
+      <div><kbd>◀ ▶</kbd>mover</div>
+      <div><kbd>1 2 3</kbd>ir a columna</div>
+      <div><kbd>▼</kbd>bajar · <kbd>ESPACIO</kbd>soltar</div>
+      <div><kbd>P</kbd>pausa · <kbd>M</kbd>sonido</div>
+    </div>
+  </section>
+</main>
+
+<div id="screen"><div class="card" id="card"></div></div>
+
+<script src="config.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ================================================================
+   CONFIGURACIÓN Y UTILIDADES
+   ================================================================ */
+const CFG = window.CONFIG || {};
+const ROWS = 10, COLS = 3, CW = 140, CH = 48, W = CW * COLS, H = CH * ROWS;
+const CAT = { A: 0, P: 1, T: 2 };
+const CAT_NAME = ['ACTIVO', 'PASIVO', 'PATRIMONIO'];
+const CAT_COLOR = ['#45d4ff', '#ff5fa2', '#ffd23f'];
+const NEUTRAL = '#9dff9d', BAD = '#ff4040';
+
+const $ = s => document.querySelector(s);
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const amt = (min, max) => rnd(min / 100, max / 100) * 100;
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const money = n => '$' + Math.abs(n).toLocaleString('es-CO');
+const signed = n => (n < 0 ? '−' : '+') + money(n);
+const total = n => (n < 0 ? '−' : '') + money(n);
+const m = money;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* ================================================================
+   OPERACIONES (solicitudes de clientes)
+   Cada operación cumple: ΔActivo = ΔPasivo + ΔPatrimonio
+   ================================================================ */
+const OPS = [
+  // ---- Nivel 1
+  { lv: 1, f: () => { const a = amt(1000, 5000); return { t: `Voy a crear mi empresa y aporto ${m(a)} en efectivo.`, m: [['Caja', 'A', a], ['Capital social', 'T', a]] }; } },
+  { lv: 1, f: () => { const a = amt(1000, 6000); return { t: `El banco me prestó ${m(a)} y los consignó en mi cuenta.`, m: [['Bancos', 'A', a], ['Obligaciones financieras', 'P', a]] }; } },
+  { lv: 1, f: () => { const a = amt(500, 3000); return { t: `Compré mercancía por ${m(a)} a crédito.`, m: [['Inventarios', 'A', a], ['Proveedores', 'P', a]] }; } },
+  { lv: 1, f: () => { const a = amt(2000, 8000); return { t: `Mi socio aportó un vehículo avaluado en ${m(a)}.`, m: [['Vehículos', 'A', a], ['Capital social', 'T', a]] }; } },
+  { lv: 1, f: () => { const a = amt(500, 2500); return { t: `Compré un computador de contado por ${m(a)}.`, m: [['Equipo de cómputo', 'A', a], ['Bancos', 'A', -a]] }; } },
+  { lv: 1, f: () => { const a = amt(300, 2000); return { t: `Consigné ${m(a)} de la caja en el banco.`, m: [['Bancos', 'A', a], ['Caja', 'A', -a]] }; } },
+  // ---- Nivel 2
+  { lv: 2, f: () => { const a = amt(300, 2000); return { t: `Pagué ${m(a)} del préstamo bancario.`, m: [['Obligaciones financieras', 'P', -a], ['Bancos', 'A', -a]] }; } },
+  { lv: 2, f: () => { const a = amt(500, 2000), b = amt(200, 1000); return { t: `Vendí de contado por ${m(a + b)} mercancía que me costó ${m(a)}.`, m: [['Caja', 'A', a + b], ['Inventarios', 'A', -a], ['Utilidad del ejercicio', 'T', b]] }; } },
+  { lv: 2, f: () => { const a = amt(1000, 3000), b = amt(1000, 3000); return { t: `Compré una máquina de ${m(a + b)}: pagué ${m(a)} y el resto a crédito.`, m: [['Maquinaria', 'A', a + b], ['Bancos', 'A', -a], ['Cuentas por pagar', 'P', b]] }; } },
+  { lv: 2, f: () => { const a = amt(300, 2500); return { t: `Un cliente me pagó una factura de ${m(a)}.`, m: [['Bancos', 'A', a], ['Clientes', 'A', -a]] }; } },
+  { lv: 2, f: () => { const a = amt(400, 2500); return { t: `Presté un servicio por ${m(a)}; me lo pagan el otro mes.`, m: [['Clientes', 'A', a], ['Utilidad del ejercicio', 'T', a]] }; } },
+  { lv: 2, f: () => { const a = amt(300, 2000); return { t: `Le pagué ${m(a)} a un proveedor.`, m: [['Proveedores', 'P', -a], ['Bancos', 'A', -a]] }; } },
+  // ---- Nivel 3
+  { lv: 3, f: () => { const a = amt(800, 3000); return { t: `Causé la nómina del mes por ${m(a)}; la pago la otra semana.`, m: [['Salarios por pagar', 'P', a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 3, f: () => { const a = amt(500, 2500); return { t: `Ya calculamos el impuesto de renta: ${m(a)}.`, m: [['Impuesto de renta por pagar', 'P', a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 3, f: () => { const a = amt(200, 1500); return { t: `Registra la depreciación del mes: ${m(a)}.`, m: [['Depreciación acumulada', 'A', -a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 3, f: () => { const a = amt(500, 3000); return { t: `Un cliente me consignó ${m(a)} de anticipo por un pedido.`, m: [['Bancos', 'A', a], ['Anticipos de clientes', 'P', a]] }; } },
+  { lv: 3, f: () => { const a = amt(500, 3000); return { t: `Le giré ${m(a)} de anticipo a un proveedor.`, m: [['Anticipos a proveedores', 'A', a], ['Bancos', 'A', -a]] }; } },
+  { lv: 3, f: () => { const a = amt(500, 3000); return { t: `La asamblea decretó dividendos por ${m(a)}.`, m: [['Utilidades retenidas', 'T', -a], ['Dividendos por pagar', 'P', a]] }; } },
+  // ---- Nivel 4
+  { lv: 4, f: () => { const a = amt(1000, 5000), i = a * 19 / 100; return { t: `Vendí de contado ${m(a)} más IVA del 19%.`, m: [['Caja', 'A', a + i], ['IVA por pagar', 'P', i], ['Utilidad del ejercicio', 'T', a]] }; } },
+  { lv: 4, f: () => { const a = amt(1000, 5000), r = a / 10; return { t: `Pagué honorarios por ${m(a)} con retención en la fuente del 10%.`, m: [['Utilidad del ejercicio', 'T', -a], ['Retención en la fuente por pagar', 'P', r], ['Bancos', 'A', -(a - r)]] }; } },
+  { lv: 4, f: () => { const a = amt(300, 2000); return { t: `Apropiamos ${m(a)} de las utilidades para la reserva legal.`, m: [['Reserva legal', 'T', a], ['Utilidades retenidas', 'T', -a]] }; } },
+  { lv: 4, f: () => { const a = amt(200, 1500); return { t: `Un cliente no me va a pagar: reconoce un deterioro de ${m(a)}.`, m: [['Deterioro de cartera', 'A', -a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 4, f: () => { const a = amt(1000, 4000); return { t: `La asamblea capitalizó ${m(a)} de utilidades retenidas.`, m: [['Capital social', 'T', a], ['Utilidades retenidas', 'T', -a]] }; } },
+  { lv: 4, f: () => { const a = amt(600, 3000); return { t: `Pagué ${m(a)} de arriendo por adelantado (6 meses).`, m: [['Gastos pagados por anticipado', 'A', a], ['Bancos', 'A', -a]] }; } },
+  // ---- Nivel 5
+  { lv: 5, f: () => { const a = amt(1000, 5000); return { t: `Un socio le prestó ${m(a)} a la empresa.`, m: [['Bancos', 'A', a], ['Cuentas por pagar a socios', 'P', a]] }; } },
+  { lv: 5, f: () => { const a = amt(1000, 6000); return { t: `Abrí un CDT por ${m(a)} con plata del banco.`, m: [['Inversiones (CDT)', 'A', a], ['Bancos', 'A', -a]] }; } },
+  { lv: 5, f: () => { const a = amt(300, 2000); return { t: `Causé ${m(a)} de cesantías de los empleados.`, m: [['Cesantías por pagar', 'P', a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 5, f: () => { const a = amt(1000, 6000); return { t: `Cerramos el año: traslada la utilidad de ${m(a)}.`, m: [['Utilidad del ejercicio', 'T', -a], ['Utilidades retenidas', 'T', a]] }; } },
+  { lv: 5, f: () => { const a = amt(300, 2500); return { t: `Pagué ${m(a)} de IVA a la DIAN.`, m: [['IVA por pagar', 'P', -a], ['Bancos', 'A', -a]] }; } },
+  { lv: 5, f: () => { const a = amt(500, 2000), b = amt(500, 2000); return { t: `Recibí mercancía por ${m(a + b)}: ya había anticipado ${m(a)} y debo el resto.`, m: [['Inventarios', 'A', a + b], ['Anticipos a proveedores', 'A', -a], ['Proveedores', 'P', b]] }; } },
+  // ---- Nivel 6
+  { lv: 6, f: () => { const a = amt(500, 2000), b = amt(200, 1000); return { t: `Vendí de contado en ${m(a)} un equipo que valía ${m(a + b)} en libros.`, m: [['Bancos', 'A', a], ['Equipo de cómputo', 'A', -(a + b)], ['Utilidad del ejercicio', 'T', -b]] }; } },
+  { lv: 6, f: () => { const a = amt(1000, 4000), b = amt(200, 1500); return { t: `Emitimos acciones: ${m(a)} de capital y ${m(b)} de prima.`, m: [['Bancos', 'A', a + b], ['Capital social', 'T', a], ['Prima en colocación de acciones', 'T', b]] }; } },
+  { lv: 6, f: () => { const a = amt(100, 1200); return { t: `El banco me cobrará ${m(a)} de intereses del mes; aún no los pago.`, m: [['Intereses por pagar', 'P', a], ['Utilidad del ejercicio', 'T', -a]] }; } },
+  { lv: 6, f: () => { const a = amt(300, 2000); return { t: `¡El banco me condonó ${m(a)} de la deuda!`, m: [['Obligaciones financieras', 'P', -a], ['Utilidad del ejercicio', 'T', a]] }; } }
+];
+
+const QUIEN = ['Don Jorge', 'Sra. Pérez', 'Ferretería El Tornillo', 'Panadería La Espiga', 'Dra. Gómez', 'Tienda Doña Rosa',
+  'Taller Los Primos', 'Café Aroma', 'Sr. Ramírez', 'Droguería Salud+', 'Transportes Rápidos', 'Estudio Creativo', 'Doña Marta', 'Ing. Castro'];
+const HAIRS = ['#2b1d12', '#d9b26a', '#7b3f1d', '#111111', '#9a9a9a', '#b8332b'];
+const SHIRTS = ['#2e86de', '#e67e22', '#8e44ad', '#16a085', '#c0392b', '#f1c40f', '#7f8c8d', '#e84393'];
+const SKINS = ['#e3b384', '#c68642', '#8d5524', '#f1c27d'];
+
+/* ================================================================
+   SONIDO 8-BIT
+   ================================================================ */
+let AC = null, muted = store.get('ceb_mute', false);
+function tone(f, d = 0.08, type = 'square', v = 0.04, delay = 0) {
+  if (muted) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime + delay;
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.03);
+  } catch (e) {}
+}
+const SFX = {
+  move: () => tone(240, .03, 'square', .025),
+  ok: () => { tone(660, .06); tone(990, .08, 'square', .04, .06); },
+  bad: () => { tone(160, .28, 'sawtooth', .06); tone(110, .3, 'sawtooth', .05, .1); },
+  drop: () => tone(90, .07, 'square', .06),
+  cuadra: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .1, 'square', .04, i * .07)),
+  level: () => [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, .12, 'triangle', .06, i * .08)),
+  clean: () => [880, 660, 1320].forEach((f, i) => tone(f, .08, 'square', .04, i * .06)),
+  over: () => [392, 330, 262, 196, 131].forEach((f, i) => tone(f, .3, 'triangle', .07, i * .22)),
+  key: () => tone(1400, .012, 'square', .008)
+};
+
+/* ================================================================
+   RANKING (Supabase REST, con respaldo local)
+   ================================================================ */
+const DB = {
+  on: !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY &&
+        !/TU-PROYECTO/i.test(CFG.SUPABASE_URL) && !/TU_ANON_KEY/i.test(CFG.SUPABASE_ANON_KEY)),
+  table: CFG.TABLA || 'ranking',
+  url(q) { return CFG.SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/' + this.table + q; },
+  headers(extra) { return Object.assign({ apikey: CFG.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, extra || {}); },
+  async top(n) {
+    if (!this.on) return localTop().slice(0, n);
+    const r = await fetch(this.url(`?select=nombre,puntuacion,creado_en&order=puntuacion.desc,creado_en.asc&limit=${n}`), { headers: this.headers() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  },
+  async save(nombre, puntuacion) {
+    if (!this.on) { const l = localTop(); l.push({ nombre, puntuacion, creado_en: new Date().toISOString() }); store.set('ceb_ranking', sortRank(l).slice(0, 50)); return; }
+    const r = await fetch(this.url(''), { method: 'POST', headers: this.headers({ Prefer: 'return=minimal' }), body: JSON.stringify({ nombre, puntuacion }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
+  },
+  async position(p) {
+    if (!this.on) return localTop().filter(x => x.puntuacion > p).length + 1;
+    const r = await fetch(this.url(`?select=id&puntuacion=gt.${p}`), { method: 'HEAD', headers: this.headers({ Prefer: 'count=exact' }) });
+    const cr = r.headers.get('content-range') || '';
+    const n = parseInt(cr.split('/')[1], 10);
+    return isNaN(n) ? null : n + 1;
+  }
+};
+function sortRank(l) { return l.sort((a, b) => b.puntuacion - a.puntuacion || String(a.creado_en).localeCompare(String(b.creado_en))); }
+function localTop() { return sortRank(store.get('ceb_ranking', [])); }
+
+/* ================================================================
+   ESTADO DEL JUEGO
+   ================================================================ */
+let S = null;
+let best = store.get('ceb_best', 0);
+let lastOp = -1;
+
+function newGame() {
+  S = {
+    mode: 'play', score: 0, level: 1, txDone: 0, combo: 0, perfectRun: 0,
+    stacks: [[], [], []], totals: [0, 0, 0], piece: null, queue: [], tx: null, txId: 0,
+    dropAcc: 0, spawnT: 0, soft: false, clearT: 0, pops: [], shake: 0, flashCol: -1, flashT: 0,
+    mood: 'idle', moodT: 0, client: null
+  };
+  nextTx();
+  hideScreen();
+  updateHUD();
+}
+
+function speed() { return Math.max(85, Math.round(800 * Math.pow(0.84, S.level - 1))); }
+function landRow(c) { return ROWS - 1 - S.stacks[c].length; }
+
+function nextTx() {
+  const pool = OPS.map((o, i) => ({ o, i })).filter(x => x.o.lv <= S.level && x.i !== lastOp);
+  // Favorece las operaciones del nivel recién desbloqueado
+  const fresh = pool.filter(x => x.o.lv === S.level);
+  const ch = (fresh.length && Math.random() < 0.45) ? pick(fresh) : pick(pool);
+  lastOp = ch.i;
+  const op = ch.o.f();
+  S.txId++;
+  S.tx = { id: S.txId, errors: 0, size: op.m.length };
+  S.queue = op.m.map(([name, cat, amount]) => ({ name, cat, amt: amount }));
+  if (S.level >= 4 && Math.random() < 0.5) S.queue.reverse();
+  S.client = { hair: pick(HAIRS), shirt: pick(SHIRTS), skin: pick(SKINS), arrive: performance.now() };
+  showRequest(pick(QUIEN) + ' (cliente #' + S.txId + ')', '«' + op.t + '»');
+  S.spawnT = Math.max(500, 1500 - S.level * 120);
+}
+
+function spawn() {
+  if (!S.queue.length) return;
+  if (S.stacks[1].length >= ROWS) return gameOver();
+  const mv = S.queue.shift();
+  S.piece = Object.assign({}, mv, { col: 1, y: 0 });
+  S.dropAcc = 0;
+  drawNext();
+}
+
+function move(d) {
+  const p = S && S.piece; if (!p || S.mode !== 'play') return false;
+  const nc = p.col + d;
+  if (nc < 0 || nc >= COLS || landRow(nc) < p.y) return false;
+  p.col = nc; SFX.move(); return true;
+}
+function moveTo(c) { if (!S || !S.piece) return; let guard = 3; while (S.piece && S.piece.col !== c && guard--) { if (!move(c > S.piece.col ? 1 : -1)) break; } }
+
+function hardDrop() {
+  const p = S && S.piece; if (!p || S.mode !== 'play') return;
+  const dist = landRow(p.col) - p.y;
+  S.score += Math.max(0, dist) * 2;
+  p.y = landRow(p.col);
+  SFX.drop();
+  land();
+}
+
+function land() {
+  const p = S.piece, c = p.col, right = CAT[p.cat], ok = c === right;
+  S.stacks[c].push({ name: p.name, cat: p.cat, amt: p.amt, tx: S.tx.id, ok });
+  S.totals[right] += p.amt; // el auditor siempre reclasifica a la columna correcta
+  S.piece = null;
+  if (ok) {
+    const pts = 10 * S.level;
+    S.score += pts; SFX.ok();
+    pop(c, landRow(c) + 1, '+' + pts, CAT_COLOR[c]);
+  } else {
+    S.tx.errors++; SFX.bad();
+    S.shake = 260; S.flashCol = c; S.flashT = 400; setMood('bad');
+    pop(c, landRow(c) + 1, 'ERA ' + CAT_NAME[right], BAD);
+    say(`Ojo: “${p.name}” (${signed(p.amt)}) va en ${CAT_NAME[right]}. Quedó un descuadre.`, true);
+  }
+  if (S.queue.length) S.spawnT = 160; else { S.mode = 'clear'; S.clearT = 520; }
+  updateHUD(); drawNext();
+}
+
+function finishClear() {
+  const id = S.tx.id;
+  S.stacks = S.stacks.map(st => st.filter(b => !(b.tx === id && b.ok)));
+  if (S.tx.errors === 0) {
+    S.combo++; S.perfectRun++;
+    const bonus = Math.round(50 * S.level * S.tx.size * (1 + 0.25 * Math.min(S.combo - 1, 4)));
+    S.score += bonus; SFX.cuadra(); setMood('ok');
+    popCenter('¡CUADRA! +' + bonus.toLocaleString('es-CO'), NEUTRAL);
+    say(pick(['¡Cuadra perfecto! Siguiente, por favor.', 'Asiento impecable. ¡Que pase el siguiente!', 'Débitos y créditos en paz. ¡Cuadra!', 'Balance cuadrado. El revisor fiscal sonríe.']));
+    if (S.perfectRun % 3 === 0) cleanGarbage();
+  } else {
+    S.combo = 0; S.perfectRun = 0;
+  }
+  S.txDone++;
+  const nl = Math.min(15, 1 + Math.floor(S.txDone / 5));
+  if (nl > S.level) {
+    S.level = nl; SFX.level();
+    popCenter('NIVEL ' + nl, '#ffd23f', 40);
+    const unlocked = OPS.some(o => o.lv === nl);
+    if (unlocked) say(`¡Nivel ${nl}! Llegan clientes con operaciones más complejas.`);
+  }
+  S.mode = 'play';
+  nextTx();
+  updateHUD();
+}
+
+function cleanGarbage() {
+  let best = -1, max = 0;
+  S.stacks.forEach((st, i) => { const n = st.filter(b => !b.ok).length; if (n > max) { max = n; best = i; } });
+  if (best < 0) return;
+  const st = S.stacks[best];
+  for (let i = st.length - 1; i >= 0; i--) if (!st[i].ok) { st.splice(i, 1); break; }
+  SFX.clean();
+  popCenter('AUDITORÍA LIMPIA: −1 DESCUADRE', '#45d4ff', -40);
+}
+
+function gameOver() {
+  S.mode = 'over'; S.piece = null; SFX.over(); setMood('bad');
+  say('El balance colapsó... mañana será otro cierre.', true);
+  if (S.score > best) { best = S.score; store.set('ceb_best', best); }
+  updateHUD();
+  setTimeout(showGameOver, 700);
+}
+
+function togglePause() {
+  if (!S) return;
+  if (S.mode === 'play' || S.mode === 'clear') { S.prev = S.mode; S.mode = 'pause'; }
+  else if (S.mode === 'pause') { S.mode = S.prev || 'play'; }
+}
+
+/* ================================================================
+   MENSAJES Y HUD
+   ================================================================ */
+let twTimer = null;
+function showRequest(q, t) {
+  $('#quien').textContent = q + ':';
+  const el = $('#texto'); clearInterval(twTimer); let i = 0; el.textContent = '';
+  twTimer = setInterval(() => {
+    el.textContent = t.slice(0, ++i);
+    if (i % 3 === 0) SFX.key();
+    if (i >= t.length) clearInterval(twTimer);
+  }, 16);
+}
+function say(t, bad) { const d = $('#dice'); d.textContent = 'CONTADOR: ' + t; d.classList.toggle('bad', !!bad); }
+function setMood(md) { S.mood = md; S.moodT = 1200; }
+function pop(c, row, text, color) { S.pops.push({ x: c * CW + CW / 2, y: row * CH, text, color, t: 0, life: 1000 }); }
+function popCenter(text, color, dy = 0) { S.pops.push({ x: W / 2, y: H / 2 + dy, text, color, t: 0, life: 1500, big: true }); }
+
+function updateHUD() {
+  if (!S) { $('#hBest').textContent = best.toLocaleString('es-CO'); return; }
+  $('#hScore').textContent = S.score.toLocaleString('es-CO');
+  $('#hLevel').textContent = S.level;
+  $('#hTx').textContent = S.txDone;
+  $('#hCombo').textContent = S.combo ? 'x' + S.combo : '0';
+  $('#hBest').textContent = Math.max(best, S.score).toLocaleString('es-CO');
+  const [a, p, t] = S.totals;
+  $('#tA').textContent = total(a); $('#tP').textContent = total(p); $('#tT').textContent = total(t);
+  const diff = a - (p + t), st = $('#eqStatus');
+  st.textContent = diff === 0 ? 'A = P + PT ✓' : 'DESCUADRE ' + total(diff);
+  st.classList.toggle('no', diff !== 0);
+}
+
+/* ================================================================
+   DIBUJO DEL TABLERO
+   ================================================================ */
+const cv = $('#field'), cx = cv.getContext('2d');
+const nv = $('#next'), nx = nv.getContext('2d');
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+cv.width = W * DPR; cv.height = H * DPR; cx.scale(DPR, DPR);
+nv.width = 140 * DPR; nv.height = 52 * DPR; nx.scale(DPR, DPR);
+
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
+function wrap(g, text, maxW) {
+  for (const size of [17, 15, 13]) {
+    g.font = `${size}px VT323, monospace`;
+    const words = text.split(' '), lines = []; let cur = '';
+    for (const w of words) {
+      const test = cur ? cur + ' ' + w : w;
+      if (g.measureText(test).width <= maxW) cur = test; else { if (cur) lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+    if (lines.length <= 2) return { lines, size };
+  }
+  return { lines: [text.slice(0, 18) + '…'], size: 13 };
+}
+
+function drawBlock(g, x, y, w, h, b, style) {
+  if (style === 'ghost') {
+    g.strokeStyle = 'rgba(157,255,157,.35)'; g.lineWidth = 2; g.setLineDash([5, 5]);
+    g.strokeRect(x + 1, y + 1, w - 2, h - 2); g.setLineDash([]); return;
+  }
+  const color = style === 'fall' ? NEUTRAL : style === 'bad' ? BAD : CAT_COLOR[CAT[b.cat]];
+  const flash = style === 'flash';
+  g.fillStyle = flash ? color : hexA(color, style === 'fall' ? .12 : .2);
+  g.fillRect(x, y, w, h);
+  if (style === 'bad') { // trama de descuadre
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.strokeStyle = 'rgba(255,64,64,.28)'; g.lineWidth = 2;
+    for (let i = -h; i < w; i += 9) { g.beginPath(); g.moveTo(x + i, y + h); g.lineTo(x + i + h, y); g.stroke(); }
+    g.restore();
+  }
+  // Bisel 8-bit
+  g.fillStyle = color; g.fillRect(x, y, w, 3); g.fillRect(x, y, 3, h);
+  g.fillStyle = hexA(color, .55); g.fillRect(x, y + h - 3, w, 3); g.fillRect(x + w - 3, y, 3, h);
+  // Texto
+  const tc = flash ? '#000' : (style === 'bad' ? '#ff9a9a' : (style === 'fall' ? '#eaffea' : color));
+  const label = style === 'bad' ? b.name : b.name;
+  const { lines, size } = wrap(g, label, w - 12);
+  g.fillStyle = tc; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = `${size}px VT323, monospace`;
+  const cxm = x + w / 2;
+  if (lines.length === 1) g.fillText(lines[0], cxm, y + 18);
+  else { g.fillText(lines[0], cxm, y + 15); g.fillText(lines[1], cxm, y + 27); }
+  g.font = '20px VT323, monospace';
+  g.fillStyle = flash ? '#000' : (style === 'bad' ? BAD : '#ffffff');
+  g.fillText(style === 'bad' ? 'DESCUADRE' : signed(b.amt), cxm, y + h - 6);
+}
+
+function render(ts) {
+  cx.save();
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
+  if (S && S.shake > 0) cx.translate((Math.random() - .5) * 8, (Math.random() - .5) * 6);
+
+  // Fondo: letras gigantes y rejilla
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.font = '64px "Press Start 2P", monospace';
+  ['A', 'P', 'Pt'].forEach((l, i) => { cx.fillStyle = hexA(CAT_COLOR[i], .07); cx.fillText(l, i * CW + CW / 2, H / 2); });
+  cx.strokeStyle = '#123012'; cx.lineWidth = 1;
+  for (let c = 1; c < COLS; c++) { cx.beginPath(); cx.moveTo(c * CW + .5, 0); cx.lineTo(c * CW + .5, H); cx.stroke(); }
+  cx.fillStyle = '#163816';
+  for (let r = 1; r < ROWS; r++) for (let c = 0; c <= COLS * 4; c++) cx.fillRect(c * CW / 4 - 1, r * CH - 1, 2, 2);
+  // Línea límite
+  cx.strokeStyle = 'rgba(255,64,64,.45)'; cx.setLineDash([6, 6]);
+  cx.beginPath(); cx.moveTo(0, CH + .5); cx.lineTo(W, CH + .5); cx.stroke(); cx.setLineDash([]);
+
+  if (S) {
+    const blink = S.mode === 'clear' && Math.floor(ts / 90) % 2 === 0;
+    S.stacks.forEach((st, c) => st.forEach((b, i) => {
+      const row = ROWS - 1 - i;
+      const style = !b.ok ? 'bad' : (S.mode === 'clear' && b.tx === S.tx.id && blink ? 'flash' : 'ok');
+      drawBlock(cx, c * CW + 4, row * CH + 3, CW - 8, CH - 6, b, style);
+    }));
+    if (S.piece) {
+      const p = S.piece, lr = landRow(p.col);
+      if (lr > p.y) drawBlock(cx, p.col * CW + 4, lr * CH + 3, CW - 8, CH - 6, p, 'ghost');
+      drawBlock(cx, p.col * CW + 4, p.y * CH + 3, CW - 8, CH - 6, p, 'fall');
+    }
+    if (S.flashT > 0 && S.flashCol >= 0) { cx.fillStyle = `rgba(255,40,40,${S.flashT / 1400})`; cx.fillRect(S.flashCol * CW, 0, CW, H); }
+    // Textos flotantes
+    S.pops.forEach(pp => {
+      const k = pp.t / pp.life, yy = pp.y - k * 40;
+      cx.globalAlpha = 1 - k * k;
+      cx.font = (pp.big ? '14px' : '10px') + ' "Press Start 2P", monospace';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillStyle = '#000'; cx.fillText(pp.text, pp.x + 2, yy + 2);
+      cx.fillStyle = pp.color; cx.fillText(pp.text, pp.x, yy);
+      cx.globalAlpha = 1;
+    });
+    if (S.mode === 'pause') {
+      cx.fillStyle = 'rgba(0,0,0,.75)'; cx.fillRect(0, 0, W, H);
+      cx.fillStyle = NEUTRAL; cx.font = '20px "Press Start 2P", monospace'; cx.textAlign = 'center';
+      cx.fillText('PAUSA', W / 2, H / 2 - 10);
+      cx.font = '9px "Press Start 2P", monospace'; cx.fillText('P PARA CONTINUAR', W / 2, H / 2 + 22);
+    }
+  }
+  cx.restore();
+}
+
+function drawNext() {
+  nx.clearRect(0, 0, 140, 52);
+  const n = S && S.queue[0];
+  if (n) drawBlock(nx, 4, 5, CW - 8, CH - 6, n, 'fall');
+  else {
+    nx.fillStyle = '#4f8a4f'; nx.font = '17px VT323, monospace'; nx.textAlign = 'center'; nx.textBaseline = 'middle';
+    nx.fillText(S && S.mode !== 'over' ? '— nuevo cliente —' : '—', 70, 26);
+  }
+}
+
+/* ================================================================
+   VENTANILLA (pixel art)
+   ================================================================ */
+const sc = $('#scene').getContext('2d');
+function px(x, y, w, h, c) { sc.fillStyle = c; sc.fillRect(x, y, w, h); }
+function drawScene(ts) {
+  const mood = S ? S.mood : 'idle';
+  const busy = S && S.piece && S.mode === 'play';
+  px(0, 0, 128, 96, '#122012');                       // pared
+  px(6, 4, 116, 50, '#3b5e3b'); px(9, 7, 110, 44, '#0b1824'); // marco + oficina
+  px(9, 7, 110, 3, '#142a3c');
+  const binders = ['#c0392b', '#2e86de', '#f1c40f', '#16a085', '#8e44ad', '#e67e22'];
+  px(13, 20, 30, 2, '#5a3a20');
+  binders.forEach((b, i) => px(14 + i * 5, 11, 4, 9, b));
+  // reloj
+  px(98, 11, 12, 12, '#ddd'); px(100, 13, 8, 8, '#fff');
+  const ang = ts / 2000; px(103, 16, 2, 2, '#000');
+  px(104 + Math.round(Math.cos(ang) * 3) - 1, 17 + Math.round(Math.sin(ang) * 3) - 1, 1, 1, '#c00');
+  // lámpara de estado
+  const lamp = mood === 'ok' ? '#3f3' : mood === 'bad' ? (Math.floor(ts / 120) % 2 ? '#f33' : '#600') : '#264';
+  px(112, 26, 5, 5, lamp);
+  // contador
+  const arm = busy ? Math.floor(ts / 140) % 2 : 0;
+  px(47, 21, 14, 5, '#2b1d12');                       // pelo
+  px(48, 24, 12, 11, '#e3b384');                      // cara
+  px(48, 24, 12, 2, '#2b1d12');
+  px(49, 28, 4, 3, '#111'); px(55, 28, 4, 3, '#111'); px(53, 29, 2, 1, '#111');
+  px(50, 29, 2, 1, '#9cf'); px(56, 29, 2, 1, '#9cf');
+  if (mood === 'bad') { px(51, 33, 6, 1, '#6a2020'); px(50, 34, 1, 1, '#6a2020'); px(57, 34, 1, 1, '#6a2020'); }
+  else if (mood === 'ok') { px(51, 33, 6, 1, '#8b3a1a'); px(50, 32, 1, 1, '#8b3a1a'); px(57, 32, 1, 1, '#8b3a1a'); }
+  else px(52, 33, 4, 1, '#8b3a1a');
+  px(44, 35, 20, 13, '#e8e8e8'); px(53, 35, 2, 9, '#c0392b'); px(52, 35, 4, 2, '#c0392b');
+  px(40, 38 + arm, 4, 9, '#e8e8e8'); px(64, 38 + (1 - arm), 4, 9, '#e8e8e8');
+  px(40, 46 + arm, 4, 2, '#e3b384'); px(64, 46 + (1 - arm), 4, 2, '#e3b384');
+  // monitor
+  px(72, 25, 24, 18, '#b5b5b5'); px(74, 27, 20, 13, '#022a0e');
+  for (let i = 0; i < 4; i++) { const wl = 4 + ((Math.floor(ts / 220) + i * 3) % 12); px(76, 29 + i * 3, busy ? wl : 6, 1, '#3f3'); }
+  px(81, 43, 6, 3, '#8a8a8a');
+  // mostrador
+  px(4, 48, 120, 6, '#8a5c34'); px(4, 54, 120, 4, '#5a3a20'); px(4, 58, 120, 38, '#2a1c10');
+  for (let i = 0; i < 6; i++) px(8 + i * 20, 62, 14, 30, '#33220f');
+  // calculadora
+  px(98, 44, 14, 5, '#444'); px(100, 45, 10, 1, '#9f9');
+  // cliente (de espaldas)
+  if (S && S.client && S.mode !== 'over') {
+    const c = S.client, k = Math.min(1, (ts - c.arrive) / 500);
+    const bx = Math.round(-30 + k * 52), bob = Math.floor(ts / 400) % 2;
+    px(bx, 70 + bob, 30, 26, c.shirt);
+    px(bx + 7, 55 + bob, 16, 16, c.hair);
+    px(bx + 5, 60 + bob, 2, 5, c.skin); px(bx + 23, 60 + bob, 2, 5, c.skin);
+    px(bx + 26, 58 + bob, 5, 14, c.shirt);            // brazo levantado
+    px(bx + 26, 52 + bob, 10, 7, '#f4f4f4');          // documento
+    px(bx + 28, 54 + bob, 6, 1, '#999'); px(bx + 28, 56 + bob, 4, 1, '#999');
+  }
+}
+
+/* ================================================================
+   BUCLE PRINCIPAL
+   ================================================================ */
+let last = 0;
+function update(dt) {
+  if (!S) return;
+  if (S.mode === 'pause') return;
+  S.pops = S.pops.filter(p => (p.t += dt) < p.life);
+  if (S.shake > 0) S.shake -= dt;
+  if (S.flashT > 0) S.flashT -= dt;
+  if (S.moodT > 0 && (S.moodT -= dt) <= 0) S.mood = 'idle';
+  if (S.mode === 'over') return;
+  if (S.mode === 'clear') { if ((S.clearT -= dt) <= 0) finishClear(); return; }
+  if (!S.piece) { if ((S.spawnT -= dt) <= 0) spawn(); return; }
+  const base = speed(), iv = S.soft ? Math.min(base, 40) : base;
+  S.dropAcc += dt;
+  while (S.piece && S.dropAcc >= iv) {
+    S.dropAcc -= iv;
+    if (S.piece.y < landRow(S.piece.col)) { S.piece.y++; if (S.soft) { S.score += 1; updateHUD(); } }
+    else land();
+  }
+}
+function loop(ts) {
+  const dt = Math.min(60, ts - (last || ts)); last = ts;
+  update(dt); render(ts); drawScene(ts);
+  requestAnimationFrame(loop);
+}
+
+/* ================================================================
+   CONTROLES
+   ================================================================ */
+addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;
+  const k = e.key;
+  if (k === 'm' || k === 'M') { muted = !muted; store.set('ceb_mute', muted); return; }
+  if (!S || S.mode === 'over') { if (k === 'Enter' && !$('#screen').classList.contains('hide')) { const b = $('#card .btn'); if (b) { e.preventDefault(); b.click(); } } return; }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' '].includes(k)) e.preventDefault();
+  if (k === 'p' || k === 'P' || k === 'Escape') return togglePause();
+  if (k === 'ArrowLeft' || k === 'a' || k === 'A') move(-1);
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') move(1);
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') S.soft = true;
+  else if (k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W') { if (!e.repeat) hardDrop(); }
+  else if (k === '1' || k === '2' || k === '3') moveTo(+k - 1);
+});
+addEventListener('keyup', e => { if (S && ['ArrowDown', 's', 'S'].includes(e.key)) S.soft = false; });
+
+document.querySelectorAll('#touch button').forEach(b => {
+  const k = b.dataset.k;
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); if (!S) return;
+    if (k === 'left') move(-1); else if (k === 'right') move(1);
+    else if (k === 'drop') hardDrop(); else if (k === 'soft') S.soft = true;
+  });
+  if (k === 'soft') ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (S) S.soft = false; }));
+});
+cv.addEventListener('pointerdown', e => {
+  if (!S) return;
+  if (S.mode === 'pause') return togglePause();
+  const r = cv.getBoundingClientRect();
+  moveTo(Math.max(0, Math.min(COLS - 1, Math.floor((e.clientX - r.left) / r.width * COLS))));
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && S && (S.mode === 'play' || S.mode === 'clear')) togglePause(); });
+
+/* ================================================================
+   PANTALLAS
+   ================================================================ */
+const card = $('#card');
+function showScreen(html) { card.innerHTML = html; $('#screen').classList.remove('hide'); }
+function hideScreen() { $('#screen').classList.add('hide'); }
+
+function rankTable(rows, me) {
+  const tbl = document.createElement('table');
+  tbl.innerHTML = '<thead><tr><th>#</th><th style="text-align:left">NOMBRE</th><th style="text-align:right">PUNTOS</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  let marked = false;
+  if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 3; td.className = 'muted'; td.style.textAlign = 'center'; td.textContent = 'Aún no hay puntajes. ¡Sé el primero!'; tr.appendChild(td); tb.appendChild(tr); }
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (me && !marked && r.nombre === me.nombre && r.puntuacion === me.puntuacion) { tr.className = 'me'; marked = true; }
+    [String(i + 1).padStart(2, '0'), r.nombre, Number(r.puntuacion).toLocaleString('es-CO')].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  return tbl;
+}
+
+async function loadRanking(target, me) {
+  target.innerHTML = '<p class="muted">Cargando ranking…</p>';
+  try {
+    const rows = await DB.top(CFG.TOP || 10);
+    target.innerHTML = '';
+    target.appendChild(rankTable(rows, me));
+    if (rows[0] && rows[0].puntuacion > best) { best = rows[0].puntuacion; updateHUD(); }
+  } catch (e) {
+    target.innerHTML = '<p class="err">No se pudo cargar el ranking. Revisa config.js y la tabla en Supabase.</p>';
+  }
+  const mode = document.createElement('p'); mode.className = 'muted'; mode.style.marginTop = '8px';
+  mode.textContent = DB.on ? 'RANKING GLOBAL · SUPABASE' : 'MODO LOCAL · configura Supabase en config.js';
+  target.appendChild(mode);
+}
+
+function showMenu() {
+  showScreen(`
+    <h2>CUADRA EL BALANCE</h2>
+    <p>Eres el contador de la <b>ventanilla 1</b>. Cada cliente trae una operación y sus cuentas caen como piezas.
+       Acomódalas en la columna correcta para que la ecuación cuadre.</p>
+    <div class="legend"><span style="color:var(--a)">ACTIVO</span><span style="color:var(--p)">PASIVO</span><span style="color:var(--t)">PATRIMONIO</span></div>
+    <p class="muted">Una pieza mal ubicada queda como bloque de DESCUADRE. Tres operaciones perfectas seguidas limpian uno.
+       Si la columna central se llena, el balance colapsa. Cada 5 clientes subes de nivel: más rápido y más difícil.</p>
+    <p class="muted">◀ ▶ mover · 1 2 3 columna · ▼ bajar · ESPACIO soltar · P pausa<br>En el celular: toca una columna o usa los botones.</p>
+    <button class="btn" id="bPlay">▶ ABRIR VENTANILLA</button>
+    <div id="rk" style="margin-top:14px"></div>`);
+  $('#bPlay').onclick = () => { tone(1, .001); newGame(); };
+  loadRanking($('#rk'));
+}
+
+function showGameOver() {
+  const sc = S.score;
+  showScreen(`
+    <h2>¡BALANCE COLAPSADO!</h2>
+    <div class="big">${sc.toLocaleString('es-CO')} PTS</div>
+    <p class="muted">Nivel ${S.level} · ${S.txDone} clientes atendidos</p>
+    <div id="saveBox">
+      <p>Escribe tu nombre para el ranking:</p>
+      <input type="text" id="nombre" maxlength="15" autocomplete="off" spellcheck="false" placeholder="TU NOMBRE">
+      <div><button class="btn" id="bSave">GUARDAR</button><button class="btn ghost" id="bSkip">NO GUARDAR</button></div>
+      <p class="err" id="saveErr"></p>
+    </div>
+    <div id="rk"></div>`);
+  const inp = $('#nombre');
+  inp.value = store.get('ceb_nombre', '');
+  setTimeout(() => inp.focus(), 50);
+  const save = async () => {
+    const nombre = inp.value.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 15);
+    if (!nombre) { $('#saveErr').textContent = 'Escribe un nombre.'; inp.focus(); return; }
+    $('#bSave').disabled = true; $('#saveErr').textContent = 'Guardando…';
+    try {
+      await DB.save(nombre, sc);
+      store.set('ceb_nombre', nombre);
+      let pos = null; try { pos = await DB.position(sc); } catch (e) {}
+      afterSave(pos ? `¡Quedaste en el puesto #${pos}!` : '¡Puntaje guardado!', { nombre, puntuacion: sc });
+    } catch (e) {
+      $('#bSave').disabled = false;
+      $('#saveErr').textContent = 'No se pudo guardar. Revisa tu conexión o la configuración de Supabase.';
+    }
+  };
+  $('#bSave').onclick = save;
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  $('#bSkip').onclick = () => afterSave('', null);
+}
+
+function afterSave(msg, me) {
+  const box = $('#saveBox'); box.innerHTML = '';
+  if (msg) { const p = document.createElement('p'); p.style.color = 'var(--t)'; p.textContent = msg; box.appendChild(p); }
+  const b = document.createElement('button'); b.className = 'btn'; b.textContent = '▶ JUGAR OTRA VEZ'; b.onclick = newGame;
+  const b2 = document.createElement('button'); b2.className = 'btn ghost'; b2.textContent = 'MENÚ'; b2.onclick = () => { S = null; resetPanel(); showMenu(); };
+  box.appendChild(b); box.appendChild(b2);
+  loadRanking($('#rk'), me);
+  b.focus();
+}
+
+function resetPanel() {
+  $('#quien').textContent = 'EN ESPERA...';
+  $('#texto').textContent = 'Abre la ventanilla para atender clientes.';
+  say('Listo para cuadrar.');
+  ['#tA', '#tP', '#tT'].forEach(s => $(s).textContent = '$0');
+  updateHUD(); drawNext();
+}
+
+/* ================================================================
+   INICIO
+   ================================================================ */
+updateHUD(); drawNext(); showMenu();
+requestAnimationFrame(loop);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawNext);
+})();
+</script>
+</body>
+</html>
